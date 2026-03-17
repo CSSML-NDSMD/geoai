@@ -97,7 +97,7 @@ def analyze():
 
         # ── Call Gemini 2.5 Pro ──────────────────────────
         response = client.models.generate_content(
-            model="gemini-2.5-pro",
+            model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT
             ),
