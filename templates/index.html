@@ -17,7 +17,7 @@
       overflow: hidden;
     }
 
-    /* ── Header ────────────────────────────────────── */
+    /* ── Header ─────────────────────────────────────── */
     header {
       background: #0d1117;
       padding: 13px 24px;
@@ -31,7 +31,7 @@
     header h1   { font-size: 1.2rem; color: #7ecb7e; font-weight: 700; }
     header p    { font-size: 0.75rem; color: #555; margin-top: 2px; }
 
-    /* ── Main Layout ───────────────────────────────── */
+    /* ── Main Layout ─────────────────────────────────── */
     .main {
       display: flex;
       flex: 1;
@@ -40,7 +40,7 @@
       overflow: hidden;
     }
 
-    /* ── Left Sidebar ──────────────────────────────── */
+    /* ── Sidebar ─────────────────────────────────────── */
     .sidebar {
       width: 220px;
       flex-shrink: 0;
@@ -72,7 +72,6 @@
     .file-panel    { flex: 1; min-height: 0; }
     .history-panel { flex: 1.2; min-height: 0; }
 
-    /* Upload status bar */
     #upload-status {
       display: none;
       font-size: 0.72rem;
@@ -84,7 +83,6 @@
       flex-shrink: 0;
     }
 
-    /* File list */
     #file-list {
       list-style: none;
       overflow-y: auto;
@@ -93,14 +91,12 @@
       flex-direction: column;
       gap: 5px;
     }
-
     #file-list .no-files {
       font-size: 0.75rem;
       color: #333;
       text-align: center;
       padding: 16px 0;
     }
-
     #file-list li.file-item {
       background: #1a2d1a;
       border-radius: 10px;
@@ -113,9 +109,13 @@
       word-break: break-all;
       line-height: 1.3;
     }
+    #file-list li.file-item.cached {
+      background: #1a2a3a;
+      color: #8ec8eb;
+      border: 1px solid #2d4a6b;
+    }
     #file-list li.file-item .ficon { flex-shrink: 0; }
 
-    /* Chat history */
     #chat-history-list {
       overflow-y: auto;
       flex: 1;
@@ -123,7 +123,6 @@
       flex-direction: column;
       gap: 5px;
     }
-
     .history-empty {
       font-size: 0.73rem;
       color: #2a3a2a;
@@ -132,7 +131,7 @@
       font-style: italic;
     }
 
-    /* ── Right Chat Area ───────────────────────────── */
+    /* ── Chat Area ───────────────────────────────────── */
     .chat-area {
       flex: 1;
       background: #161b16;
@@ -154,7 +153,6 @@
       scroll-behavior: smooth;
     }
 
-    /* Welcome */
     .welcome {
       margin: auto;
       text-align: center;
@@ -165,7 +163,7 @@
     .welcome h2 { font-size: 1rem; color: #3a6a3a; margin-bottom: 8px; }
     .welcome p  { font-size: 0.8rem; line-height: 1.6; }
 
-    /* ── Message Bubbles ───────────────────────────── */
+    /* ── Messages ────────────────────────────────────── */
     .msg-user {
       align-self: flex-end;
       max-width: 68%;
@@ -202,6 +200,11 @@
       font-size: 0.7rem;
       color: #6ecb6e;
     }
+    .attach-tag.cached-tag {
+      background: #142a3a;
+      border-color: #2d4a6b;
+      color: #6ec8eb;
+    }
 
     .msg-ai { align-self: flex-start; max-width: 86%; }
     .msg-ai .ai-label {
@@ -225,6 +228,14 @@
       word-break: break-word;
     }
 
+    /* Generated image inside chat */
+    .msg-ai .bubble img {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 8px;
+      border: 1px solid #2d5a2d;
+    }
+
     /* Typing dots */
     .typing-indicator .bubble {
       display: flex;
@@ -245,7 +256,7 @@
       40%          { transform: translateY(-7px); opacity: 1; }
     }
 
-    /* ── Input Bar ─────────────────────────────────── */
+    /* ── Input Bar ───────────────────────────────────── */
     .input-bar {
       padding: 11px 14px;
       background: #111811;
@@ -274,13 +285,12 @@
     .upload-menu {
       display: none;
       position: absolute;
-      bottom: 48px;
-      left: 0;
+      bottom: 48px; left: 0;
       background: #1a2a1a;
       border: 1px solid #2d5a2d;
       border-radius: 14px;
       overflow: hidden;
-      min-width: 185px;
+      min-width: 200px;
       z-index: 200;
       box-shadow: 0 6px 24px rgba(0,0,0,0.6);
     }
@@ -320,7 +330,7 @@
       font-family: 'Segoe UI', sans-serif;
       transition: border-color 0.2s;
     }
-    #promptInput:focus  { border-color: #4a8a4a; }
+    #promptInput:focus        { border-color: #4a8a4a; }
     #promptInput::placeholder { color: #2a4a2a; }
 
     .ask-btn {
@@ -339,7 +349,98 @@
     .ask-btn:hover    { opacity: 0.88; transform: scale(1.02); }
     .ask-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-    /* Scrollbar */
+    /* ── Image Generation Modal ──────────────────────── */
+    #imageGenModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+    #imageGenModal.open { display: flex; }
+
+    .modal-box {
+      background: #161b16;
+      border: 1.5px solid #2d5a2d;
+      border-radius: 22px;
+      padding: 24px;
+      width: 500px;
+      max-width: 92vw;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header span { color: #7ecb7e; font-weight: 700; font-size: 1rem; }
+    .modal-close {
+      cursor: pointer;
+      color: #555;
+      font-size: 1.3rem;
+      line-height: 1;
+    }
+    .modal-close:hover { color: #888; }
+
+    #imagePromptInput {
+      background: #1a2d1a;
+      border: 1.5px solid #1e3a1e;
+      border-radius: 14px;
+      color: #e0e0e0;
+      font-size: 0.88rem;
+      padding: 10px 14px;
+      resize: none;
+      height: 90px;
+      font-family: 'Segoe UI', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #imagePromptInput:focus { border-color: #4a8a4a; }
+    #imagePromptInput::placeholder { color: #2a4a2a; }
+
+    #genImgBtn {
+      background: linear-gradient(135deg, #2d6a2d, #3a8a3a);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      padding: 11px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    #genImgBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #genImgBtn:hover:not(:disabled) { opacity: 0.88; }
+
+    #imageGenResult { display: none; text-align: center; }
+    #generatedImg {
+      max-width: 100%;
+      border-radius: 14px;
+      border: 1px solid #2d5a2d;
+      margin-top: 6px;
+    }
+    #downloadImgLink {
+      color: #7ecb7e;
+      font-size: 0.82rem;
+      margin-top: 10px;
+      display: inline-block;
+      text-decoration: none;
+    }
+    #downloadImgLink:hover { text-decoration: underline; }
+    #imageGenError {
+      display: none;
+      color: #cb7e7e;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────── */
     ::-webkit-scrollbar       { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #1e3a1e; border-radius: 4px; }
@@ -354,17 +455,16 @@
   <div class="logo">🪨</div>
   <div>
     <h1>GeoAI Analyst &nbsp;·&nbsp; Geology Prototype 1</h1>
-    <p>prototype &nbsp;·&nbsp; Upload maps, contours, cross-sections &amp; PDF reports</p>
+    <p>Powered by Gemini 2.5 Flash &nbsp;·&nbsp; Upload maps, contours, cross-sections &amp; PDF reports</p>
   </div>
 </header>
 
 <!-- ── Main ─────────────────────────────────────────── -->
 <div class="main">
 
-  <!-- Left Sidebar -->
+  <!-- Sidebar -->
   <div class="sidebar">
 
-    <!-- Uploaded Files -->
     <div class="panel file-panel">
       <div class="panel-title">📂 Uploaded Files</div>
       <div id="upload-status"></div>
@@ -373,7 +473,6 @@
       </ul>
     </div>
 
-    <!-- Chat History (UI only) -->
     <div class="panel history-panel">
       <div class="panel-title">🕘 Chat History</div>
       <div id="chat-history-list">
@@ -383,7 +482,7 @@
 
   </div>
 
-  <!-- Right Chat Area -->
+  <!-- Chat Area -->
   <div class="chat-area">
 
     <div id="chat-messages">
@@ -394,19 +493,22 @@
           Upload a geological map, contour image,<br/>
           cross-section or PDF report using the
           <strong style="color:#4a8a4a">+</strong> button,<br/>
-          then ask any geological question below.
+          then ask any geological question below.<br/><br/>
+          Use <strong style="color:#4a8a4a">🎨 Generate Diagram</strong>
+          to create geological illustrations.
         </p>
       </div>
     </div>
 
     <!-- Input Bar -->
     <div class="input-bar">
-
       <div class="upload-btn-wrap">
         <div class="upload-btn" id="uploadBtn" onclick="toggleMenu(event)">+</div>
         <div class="upload-menu" id="uploadMenu">
           <button onclick="triggerImageUpload()">🗺️ Upload Map / Image</button>
           <button onclick="triggerPdfUpload()">📄 Upload PDF Report</button>
+          <div class="menu-divider"></div>
+          <button onclick="openImageGen()">🎨 Generate Diagram</button>
           <div class="menu-divider"></div>
           <button onclick="clearFiles()">🗑️ Clear All Files</button>
         </div>
@@ -428,10 +530,36 @@
   </div>
 </div>
 
+<!-- ── Image Generation Modal ───────────────────────── -->
+<div id="imageGenModal">
+  <div class="modal-box">
+
+    <div class="modal-header">
+      <span>🎨 Generate Geological Diagram</span>
+      <span class="modal-close" onclick="closeImageGen()">✕</span>
+    </div>
+
+    <textarea id="imagePromptInput"
+      placeholder="e.g. Cross-section of an anticline with labeled sandstone, limestone and shale layers..."></textarea>
+
+    <button id="genImgBtn" onclick="generateImage()">Generate Image</button>
+
+    <div id="imageGenResult">
+      <img id="generatedImg" src="" alt="Generated geological diagram"/>
+      <br/>
+      <a id="downloadImgLink" download="geo-diagram.png">⬇ Download Image</a>
+    </div>
+
+    <div id="imageGenError"></div>
+
+  </div>
+</div>
+
 <!-- ── Script ────────────────────────────────────────── -->
 <script>
   let uploadedImages = [];
   let uploadedPdf    = null;
+  let cachedPdfName  = null;
 
   // ── Upload Menu ──────────────────────────────────────
   function toggleMenu(e) {
@@ -449,25 +577,31 @@
   // ── File Handlers ────────────────────────────────────
   function handleImages(input) {
     uploadedImages = Array.from(input.files);
-    uploadedImages.forEach(f => addToFileList(f.name, "🗺️"));
+    uploadedImages.forEach(f => addToFileList(f.name, "🗺️", false));
     setStatus("✅ " + uploadedImages.length + " image(s) ready", "green");
   }
 
   function handlePdf(input) {
     if (input.files[0]) {
       uploadedPdf = input.files[0];
-      addToFileList(uploadedPdf.name, "📄");
-      setStatus("✅ PDF ready: " + uploadedPdf.name, "green");
+      addToFileList(uploadedPdf.name, "📄", false);
+      setStatus("✅ PDF ready — will be cached after first send", "green");
     }
   }
 
-  function addToFileList(name, icon) {
+  function addToFileList(name, icon, isCached) {
     const list        = document.getElementById("file-list");
     const placeholder = list.querySelector(".no-files");
     if (placeholder) placeholder.remove();
+
+    const existing = list.querySelector(`[data-name="${CSS.escape(name)}"]`);
+    if (existing) existing.remove();
+
     const li = document.createElement("li");
-    li.className = "file-item";
-    li.innerHTML = `<span class="ficon">${icon}</span>${name}`;
+    li.className = "file-item" + (isCached ? " cached" : "");
+    li.setAttribute("data-name", name);
+    li.innerHTML = `<span class="ficon">${icon}</span>${name}`
+      + (isCached ? ' <span style="font-size:0.65rem;opacity:0.7">(cached ⚡)</span>' : "");
     list.appendChild(li);
   }
 
@@ -475,28 +609,29 @@
     closeMenu();
     uploadedImages = [];
     uploadedPdf    = null;
+    cachedPdfName  = null;
     document.getElementById("imageInput").value = "";
     document.getElementById("pdfInput").value   = "";
     document.getElementById("file-list").innerHTML =
       `<li class="no-files">No files uploaded yet</li>`;
     hideStatus();
+    fetch("/clear-pdf", { method: "POST" });
   }
 
-  // ── Status Indicator ─────────────────────────────────
+  // ── Status Bar ───────────────────────────────────────
   function setStatus(message, type) {
     const el = document.getElementById("upload-status");
-    el.textContent = message;
+    el.textContent   = message;
     el.style.display = "block";
-    if (type === "green") {
-      el.style.background = "#1a3a1a";
-      el.style.color      = "#7ecb7e";
-    } else if (type === "yellow") {
-      el.style.background = "#2a2a0a";
-      el.style.color      = "#cbcb7e";
-    } else if (type === "red") {
-      el.style.background = "#3a1a1a";
-      el.style.color      = "#cb7e7e";
-    }
+    const styles = {
+      green:  ["#1a3a1a","#7ecb7e"],
+      yellow: ["#2a2a0a","#cbcb7e"],
+      red:    ["#3a1a1a","#cb7e7e"],
+      blue:   ["#1a2a3a","#7ec8eb"]
+    };
+    const [bg, color] = styles[type] || styles.green;
+    el.style.background = bg;
+    el.style.color      = color;
   }
 
   function hideStatus() {
@@ -505,17 +640,16 @@
     el.textContent   = "";
   }
 
-  // ── Textarea Auto-resize ─────────────────────────────
+  // ── Textarea ─────────────────────────────────────────
   function autoResize(el) {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 130) + "px";
   }
-
   function onKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
-  // ── Message Renderers ────────────────────────────────
+  // ── Chat Messages ────────────────────────────────────
   function removeWelcome() {
     const w = document.getElementById("welcome-screen");
     if (w) w.remove();
@@ -523,11 +657,21 @@
 
   function appendUser(text) {
     removeWelcome();
-    const tags = [
-      ...uploadedImages.map(f => `<span class="attach-tag">🗺️ ${f.name}</span>`),
-      ...(uploadedPdf ? [`<span class="attach-tag">📄 ${uploadedPdf.name}</span>`] : [])
-    ].join("");
-    const attachHTML = tags ? `<div class="attachments">${tags}</div>` : "";
+    const imgTags = uploadedImages.map(f =>
+      `<span class="attach-tag">🗺️ ${esc(f.name)}</span>`
+    ).join("");
+
+    let pdfTag = "";
+    if (uploadedPdf) {
+      pdfTag = `<span class="attach-tag">📄 ${esc(uploadedPdf.name)}</span>`;
+    } else if (cachedPdfName) {
+      pdfTag = `<span class="attach-tag cached-tag">⚡ ${esc(cachedPdfName)} (cached)</span>`;
+    }
+
+    const attachHTML = (imgTags || pdfTag)
+      ? `<div class="attachments">${imgTags}${pdfTag}</div>`
+      : "";
+
     const div = document.createElement("div");
     div.className = "msg-user";
     div.innerHTML = `
@@ -553,14 +697,14 @@
     scrollBottom();
   }
 
-  function replaceTyping(text) {
+  function replaceTyping(html, isHTML = false) {
     const t = document.getElementById("typing");
     if (!t) return;
     const div = document.createElement("div");
     div.className = "msg-ai";
     div.innerHTML = `
       <div class="ai-label">🪨 GeoAI</div>
-      <div class="bubble">${esc(text)}</div>`;
+      <div class="bubble">${isHTML ? html : esc(html)}</div>`;
     t.replaceWith(div);
     scrollBottom();
   }
@@ -571,14 +715,14 @@
   }
 
   function esc(t) {
-    return t
+    return String(t)
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
       .replace(/>/g,"&gt;")
       .replace(/\n/g,"<br/>");
   }
 
-  // ── Send ─────────────────────────────────────────────
+  // ── Send Message ─────────────────────────────────────
   async function send() {
     const input  = document.getElementById("promptInput");
     const askBtn = document.getElementById("askBtn");
@@ -591,9 +735,10 @@
     askBtn.disabled = true;
     showTyping();
 
-    // Show uploading status if files attached
-    if (uploadedImages.length > 0 || uploadedPdf) {
-      setStatus("⏳ Uploading & analyzing...", "yellow");
+    if (uploadedPdf) {
+      setStatus("⏳ Uploading PDF to Gemini...", "yellow");
+    } else if (cachedPdfName) {
+      setStatus("⚡ Using cached: " + cachedPdfName, "blue");
     }
 
     const form = new FormData();
@@ -609,20 +754,100 @@
         setStatus("❌ " + data.error, "red");
         replaceTyping("❌ " + data.error);
       } else {
-        setStatus("✅ Analysis complete", "green");
+        if (data.cached_pdf) {
+          cachedPdfName = data.cached_pdf;
+          addToFileList(cachedPdfName, "📄", true);
+          setStatus("⚡ PDF cached — reusing for next queries", "blue");
+          setTimeout(hideStatus, 4000);
+        } else {
+          setStatus("✅ Analysis complete", "green");
+          setTimeout(hideStatus, 3000);
+        }
         replaceTyping(data.result);
-        // Auto-hide status after 4 seconds
-        setTimeout(hideStatus, 4000);
       }
-
-      
 
     } catch (err) {
       setStatus("❌ Network error", "red");
       replaceTyping("❌ Network error: " + err.message);
     } finally {
+      // Keep PDF cached, only clear new image uploads
+      uploadedImages = [];
+      uploadedPdf    = null;
+      document.getElementById("imageInput").value = "";
       askBtn.disabled = false;
       input.focus();
+    }
+  }
+
+  // ── Image Generation Modal ───────────────────────────
+  function openImageGen() {
+    closeMenu();
+    document.getElementById("imageGenModal").classList.add("open");
+    document.getElementById("imageGenResult").style.display = "none";
+    document.getElementById("imageGenError").style.display  = "none";
+    document.getElementById("imagePromptInput").value = "";
+    setTimeout(() => document.getElementById("imagePromptInput").focus(), 100);
+  }
+
+  function closeImageGen() {
+    document.getElementById("imageGenModal").classList.remove("open");
+  }
+
+  document.getElementById("imageGenModal").addEventListener("click", function(e) {
+    if (e.target === this) closeImageGen();
+  });
+
+  async function generateImage() {
+    const prompt = document.getElementById("imagePromptInput").value.trim();
+    const btn    = document.getElementById("genImgBtn");
+    const result = document.getElementById("imageGenResult");
+    const errDiv = document.getElementById("imageGenError");
+    const img    = document.getElementById("generatedImg");
+    const dlLink = document.getElementById("downloadImgLink");
+
+    if (!prompt) return;
+
+    btn.textContent   = "⏳ Generating...";
+    btn.disabled      = true;
+    result.style.display = "none";
+    errDiv.style.display = "none";
+
+    const form = new FormData();
+    form.append("prompt", prompt);
+
+    try {
+      const res  = await fetch("/generate-image", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (data.error) {
+        errDiv.textContent   = "❌ " + data.error;
+        errDiv.style.display = "block";
+      } else {
+        img.src              = data.image;
+        dlLink.href          = data.image;
+        result.style.display = "block";
+
+        // Also show the generated image in the chat
+        removeWelcome();
+        const chatDiv = document.createElement("div");
+        chatDiv.className = "msg-ai";
+        chatDiv.innerHTML = `
+          <div class="ai-label">🪨 GeoAI · Generated Diagram</div>
+          <div class="bubble">
+            <em style="font-size:0.8rem;color:#5a8a5a;">Prompt: ${esc(prompt)}</em>
+            <br/>
+            <img src="${data.image}" alt="Generated diagram"/>
+          </div>`;
+        document.getElementById("chat-messages").appendChild(chatDiv);
+        scrollBottom();
+      }
+
+    } catch (err) {
+      errDiv.textContent   = "❌ Network error: " + err.message;
+      errDiv.style.display = "block";
+    } finally {
+      btn.textContent = "Generate Image";
+      btn.disabled    = false;
     }
   }
 </script>
