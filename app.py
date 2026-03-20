@@ -8,7 +8,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
 
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY"),
@@ -27,11 +27,12 @@ Your expertise covers:
 
 Important behavior rules:
 - NEVER introduce yourself as a geologist or any human role
-- When greeted, respond warmly and say you are here to help with geology-related queries
+- Do NOT start your answers with greetings or introductions like "Hello! I am GeoAI...". Just answer directly.
 - Always use standard GSI (Geological Survey of India) and USGS conventions
 - Structure your responses with clear headings
 - Be technical but precise
-- If asked who you are, say: 'I am GeoAI, here to help you with your geology-related queries.'"""
+- CRITICAL: If the user uploads both an image and a document, read BOTH carefully and synthesize the final answer. Do NOT ignore the image.
+- If explicitly asked who you are, say: 'I am GeoAI, here to help you with your geology-related queries.'"""
 
 # ── In-memory store for Gemini file references ───────────
 # Stores only tiny file reference strings — NOT PDF bytes
@@ -88,9 +89,9 @@ def analyze():
             if img_file and img_file.filename:
                 img_bytes = img_file.read()
 
-                if len(img_bytes) > 10 * 1024 * 1024:
+                if len(img_bytes) > 20 * 1024 * 1024:
                     return jsonify({
-                        "error": f"Image '{img_file.filename}' exceeds 10MB."
+                        "error": f"Image '{img_file.filename}' exceeds 20MB."
                     }), 400
 
                 fname = img_file.filename.lower()
@@ -109,53 +110,85 @@ def analyze():
         if pdf_file and pdf_file.filename:
             # New PDF uploaded — delete old cached ref if exists
             old_ref = file_ref_store.get(session_key)
-            if old_ref:
+            if old_ref and old_ref.get("file_name"):
                 try:
                     client.files.delete(name=old_ref["file_name"])
                 except Exception:
                     pass
-                file_ref_store.pop(session_key, None)
+            file_ref_store.pop(session_key, None)
 
             pdf_bytes = pdf_file.read()
             if len(pdf_bytes) > 20 * 1024 * 1024:
-                return jsonify({"error": "PDF exceeds 20MB limit."}), 400
+                return jsonify({"error": "Document exceeds 20MB limit."}), 400
 
-            # Write to temp file for upload
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
-                tmp_path = tmp.name
+            fname = pdf_file.filename.lower()
 
-            # Upload to Gemini Files API — lives on Google servers 48hrs
-            uploaded = client.files.upload(
-                file=tmp_path,
-                config=types.UploadFileConfig(
-                    mime_type="application/pdf",
-                    display_name=pdf_file.filename
+            if fname.endswith(".docx"):
+                import io, docx
+                doc = docx.Document(io.BytesIO(pdf_bytes))
+                text = "\n".join([p.text for p in doc.paragraphs])
+                file_ref_store[session_key] = {
+                    "type": "text",
+                    "content": text,
+                    "display_name": pdf_file.filename
+                }
+                contents.append(f"Document Content from {pdf_file.filename}:\n\n{text}")
+
+            elif fname.endswith(".txt"):
+                text = pdf_bytes.decode("utf-8", errors="replace")
+                file_ref_store[session_key] = {
+                    "type": "text",
+                    "content": text,
+                    "display_name": pdf_file.filename
+                }
+                contents.append(f"Document Content from {pdf_file.filename}:\n\n{text}")
+
+            else:
+                # Write to temp file for upload (assuming PDF)
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+
+                # Upload to Gemini Files API — lives on Google servers 48hrs
+                uploaded = client.files.upload(
+                    file=tmp_path,
+                    config=types.UploadFileConfig(
+                        mime_type="application/pdf",
+                        display_name=pdf_file.filename
+                    )
                 )
-            )
 
-            # Store only the tiny file reference string
-            file_ref_store[session_key] = {
-                "file_name":    uploaded.name,
-                "display_name": pdf_file.filename
-            }
+                # Store only the tiny file reference string
+                file_ref_store[session_key] = {
+                    "type": "pdf",
+                    "file_name":    uploaded.name,
+                    "display_name": pdf_file.filename
+                }
 
-            contents.append(uploaded)
+                contents.append(uploaded)
 
-        elif file_ref_store.get(session_key):
-            # Reuse existing cached file reference from Gemini
+        elif request.form.get("use_cache") == "true" and file_ref_store.get(session_key):
             ref = file_ref_store[session_key]
-            try:
-                existing_file = client.files.get(name=ref["file_name"])
-                contents.append(existing_file)
-            except Exception:
-                # File expired — ask user to re-upload
-                file_ref_store.pop(session_key, None)
-                return jsonify({
-                    "error": "Cached PDF expired (48hr limit). Please re-upload your PDF."
-                }), 400
+            if ref.get("type") == "text":
+                contents.append(f"Document Content from {ref['display_name']}:\n\n{ref['content']}")
+            else:
+                try:
+                    existing_file = client.files.get(name=ref["file_name"])
+                    contents.append(existing_file)
+                except Exception:
+                    # File expired — ask user to re-upload
+                    file_ref_store.pop(session_key, None)
+                    return jsonify({
+                        "error": "Cached document expired (48hr limit). Please re-upload your document."
+                    }), 400
 
         # ── Add question ─────────────────────────────────
+        has_doc = (pdf_file and pdf_file.filename) or (request.form.get("use_cache") == "true" and file_ref_store.get(session_key))
+        has_img = len(images) > 0
+        
+        if has_doc and has_img:
+            contents.append("\n[SYSTEM NOTE: The user has provided BOTH image(s) and a document. You MUST analyze and address BOTH sources to answer the query correctly.]\n")
+
         contents.append(query)
 
         # ── Call Gemini with retry ────────────────────────
@@ -185,10 +218,11 @@ def clear_pdf():
     session_key = get_session_key()
     ref = file_ref_store.get(session_key)
     if ref:
-        try:
-            client.files.delete(name=ref["file_name"])
-        except Exception:
-            pass
+        if ref.get("type") != "text":
+            try:
+                client.files.delete(name=ref["file_name"])
+            except Exception:
+                pass
         file_ref_store.pop(session_key, None)
     return jsonify({"status": "cleared"})
 
@@ -205,32 +239,34 @@ def generate_image():
             f"Style: technical, clean, labeled diagram suitable for academic use."
         )
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[full_prompt],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"]
+        response = client.models.generate_images(
+            model="imagen-4.0-generate-001",
+            prompt=full_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="1:1"
             )
         )
 
-        for part in response.parts:
-            if part.inline_data is not None:
-                img_base64 = base64.b64encode(
-                    part.inline_data.data
-                ).decode("utf-8")
-                mime = part.inline_data.mime_type
-                return jsonify({
-                    "image": f"data:{mime};base64,{img_base64}"
-                })
+        for generated_image in response.generated_images:
+            img_bytes = generated_image.image.image_bytes
+            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+            return jsonify({
+                "image": f"data:image/jpeg;base64,{img_base64}"
+            })
 
         return jsonify({
             "error": "No image generated. Try a more descriptive prompt."
         }), 400
 
     except Exception as e:
+        err_str = str(e)
+        if "paid plans" in err_str.lower() or "INVALID_ARGUMENT" in err_str:
+             return jsonify({"error": "Image generation (Imagen 3/4) requires a paid Google AI Studio plan. It is not available on the free tier."}), 400
+        
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": err_str}), 500
 
 
 if __name__ == "__main__":
