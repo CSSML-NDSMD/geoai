@@ -15,6 +15,8 @@ client = genai.Client(
     http_options=types.HttpOptions(timeout=120000)
 )
 
+# --- UPDATED SYSTEM PROMPT ---
+# Added strict rules about hallucination and explicit formatting for tables
 SYSTEM_PROMPT = """You are GeoAI, an intelligent geological analysis assistant.
 
 Your expertise covers:
@@ -24,31 +26,25 @@ Your expertise covers:
 - Geomorphology and topographic interpretation
 - Remote sensing and geological map reading
 - Contour and elevation analysis
-- Survey Report analysis and conclusion and recommendation
+- Survey Report analysis, conclusions, and recommendations
 
-Important behavior rules:
-- NEVER introduce yourself as a geologist or any human role
-- Do NOT start your answers with greetings or introductions like "Hello! I am GeoAI...". Just answer directly.
-- Always use standard GSI (Geological Survey of India) and USGS conventions
-- Structure your responses with clear headings
-- Be technical but precise
-- CRITICAL: If the user uploads both an image and a document, read BOTH carefully and synthesize the final answer. Do NOT ignore the image.
-- CRITICAL: .pdf, .doc. docx, .txt are document and .jpg, .jpeg, .png, .webp are image.
-- Whenever asked to do comparison ask if user want comparison table or not
-- If user mention table always draw the table
-- If explicitly asked who you are, say: 'I am GeoAI, here to help you with your geology-related queries.'"""
+CRITICAL INSTRUCTIONS:
+1. NEVER introduce yourself as a geologist or any human role. Answer directly.
+2. DO NOT hallucinate. If the system notes that NO files were provided, answer strictly from your internal knowledge and do not refer to "this document" or "this image".
+3. Differentiate clearly between the provided images (maps, photos) and documents (reports, text). 
+4. If the user mentions a table, or asks for a comparison, YOU MUST output a valid Markdown table (e.g., | Column A | Column B |).
+5. Always use standard GSI (Geological Survey of India) and USGS conventions.
+6. Structure your responses with clear headings.
+7. If explicitly asked who you are, say: 'I am GeoAI, here to help you with your geology-related queries.'"""
 
-# ── In-memory store for Gemini file references ───────────
-# Stores only tiny file reference strings — NOT PDF bytes
+# In-memory store for Gemini file references
 file_ref_store = {}
-
 
 def get_session_key():
     if 'session_key' not in session:
         import uuid
         session['session_key'] = str(uuid.uuid4())
     return session['session_key']
-
 
 def call_gemini_with_retry(contents, retries=3):
     """Call Gemini with automatic retry on 429/503 errors."""
@@ -65,16 +61,14 @@ def call_gemini_with_retry(contents, retries=3):
         except Exception as e:
             err_str = str(e)
             if ("429" in err_str or "503" in err_str) and attempt < retries - 1:
-                wait = (attempt + 1) * 30  # 30s then 60s
+                wait = (attempt + 1) * 30  
                 time.sleep(wait)
                 continue
             raise e
 
-
 @app.route("/")
 def index():
     return render_template("index.html")
-
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
@@ -86,39 +80,39 @@ def analyze():
 
         session_key = get_session_key()
         contents = []
+        has_img = False
+        has_doc = False
 
-        # ── Process Images (always inline) ───────────────
+        # ── 1. Process Images ───────────────────────────
         images = request.files.getlist("images")
         for img_file in images:
             if img_file and img_file.filename:
                 img_bytes = img_file.read()
 
                 if len(img_bytes) > 20 * 1024 * 1024:
-                    return jsonify({
-                        "error": f"Image '{img_file.filename}' exceeds 20MB."
-                    }), 400
+                    return jsonify({"error": f"Image '{img_file.filename}' exceeds 20MB."}), 400
 
                 fname = img_file.filename.lower()
-                if   fname.endswith(".png"):             mime = "image/png"
-                elif fname.endswith((".jpg", ".jpeg")):  mime = "image/jpeg"
-                elif fname.endswith((".tif", ".tiff")):  mime = "image/tiff"
-                else:                                    mime = "image/jpeg"
+                if   fname.endswith(".png"):          mime = "image/png"
+                elif fname.endswith((".jpg", ".jpeg")): mime = "image/jpeg"
+                elif fname.endswith((".tif", ".tiff")): mime = "image/tiff"
+                else:                                   mime = "image/jpeg"
 
-                contents.append(
-                    types.Part.from_bytes(data=img_bytes, mime_type=mime)
-                )
+                # Tag the boundary explicitly
+                contents.append(f"--- ATTACHED IMAGE: {img_file.filename} ---")
+                contents.append(types.Part.from_bytes(data=img_bytes, mime_type=mime))
+                has_img = True
 
-        # ── Process PDF via Files API ────────────────────
+        # ── 2. Process Document (PDF/DOCX/TXT) ───────────
         pdf_file = request.files.get("pdf")
+        use_cache = request.form.get("use_cache") == "true"
 
         if pdf_file and pdf_file.filename:
-            # New PDF uploaded — delete old cached ref if exists
+            # Clear old cache
             old_ref = file_ref_store.get(session_key)
             if old_ref and old_ref.get("file_name"):
-                try:
-                    client.files.delete(name=old_ref["file_name"])
-                except Exception:
-                    pass
+                try: client.files.delete(name=old_ref["file_name"])
+                except: pass
             file_ref_store.pop(session_key, None)
 
             pdf_bytes = pdf_file.read()
@@ -126,81 +120,73 @@ def analyze():
                 return jsonify({"error": "Document exceeds 20MB limit."}), 400
 
             fname = pdf_file.filename.lower()
+            contents.append(f"--- ATTACHED DOCUMENT: {pdf_file.filename} ---")
 
             if fname.endswith(".docx"):
                 import io, docx
                 doc = docx.Document(io.BytesIO(pdf_bytes))
                 text = "\n".join([p.text for p in doc.paragraphs])
-                file_ref_store[session_key] = {
-                    "type": "text",
-                    "content": text,
-                    "display_name": pdf_file.filename
-                }
-                contents.append(f"Document Content from {pdf_file.filename}:\n\n{text}")
+                file_ref_store[session_key] = {"type": "text", "content": text, "display_name": pdf_file.filename}
+                contents.append(text)
+                has_doc = True
 
             elif fname.endswith(".txt"):
                 text = pdf_bytes.decode("utf-8", errors="replace")
-                file_ref_store[session_key] = {
-                    "type": "text",
-                    "content": text,
-                    "display_name": pdf_file.filename
-                }
-                contents.append(f"Document Content from {pdf_file.filename}:\n\n{text}")
+                file_ref_store[session_key] = {"type": "text", "content": text, "display_name": pdf_file.filename}
+                contents.append(text)
+                has_doc = True
 
             else:
-                # Write to temp file for upload (assuming PDF)
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                     tmp.write(pdf_bytes)
                     tmp_path = tmp.name
 
-                # Upload to Gemini Files API — lives on Google servers 48hrs
                 uploaded = client.files.upload(
                     file=tmp_path,
-                    config=types.UploadFileConfig(
-                        mime_type="application/pdf",
-                        display_name=pdf_file.filename
-                    )
+                    config=types.UploadFileConfig(mime_type="application/pdf", display_name=pdf_file.filename)
                 )
 
-                # Store only the tiny file reference string
-                file_ref_store[session_key] = {
-                    "type": "pdf",
-                    "file_name":    uploaded.name,
-                    "display_name": pdf_file.filename
-                }
-
+                file_ref_store[session_key] = {"type": "pdf", "file_name": uploaded.name, "display_name": pdf_file.filename}
                 contents.append(uploaded)
+                has_doc = True
 
-        elif request.form.get("use_cache") == "true" and file_ref_store.get(session_key):
+        elif use_cache and file_ref_store.get(session_key):
             ref = file_ref_store[session_key]
+            contents.append(f"--- CACHED DOCUMENT: {ref['display_name']} ---")
+            
             if ref.get("type") == "text":
-                contents.append(f"Document Content from {ref['display_name']}:\n\n{ref['content']}")
+                contents.append(ref['content'])
+                has_doc = True
             else:
                 try:
                     existing_file = client.files.get(name=ref["file_name"])
                     contents.append(existing_file)
+                    has_doc = True
                 except Exception:
-                    # File expired — ask user to re-upload
                     file_ref_store.pop(session_key, None)
-                    return jsonify({
-                        "error": "Cached document expired (48hr limit). Please re-upload your document."
-                    }), 400
+                    return jsonify({"error": "Cached document expired (48hr limit). Please re-upload."}), 400
 
-        # ── Add question ─────────────────────────────────
-        has_doc = (pdf_file and pdf_file.filename) or (request.form.get("use_cache") == "true" and file_ref_store.get(session_key))
-        has_img = len(images) > 0
-        
+        # ── 3. Inject Dynamic System States & Query ──────
+        # This tells the LLM EXACTLY what is going on so it doesn't guess or hallucinate.
+        state_note = "\n\n[SYSTEM STATE: "
         if has_doc and has_img:
-            contents.append("\n[SYSTEM NOTE: The user has provided BOTH image(s) and a document. You MUST analyze and address BOTH sources to answer the query correctly.]\n")
+            state_note += "The user has provided BOTH image(s) and a document. Synthesize your answer using BOTH.]"
+        elif has_doc:
+            state_note += "The user has provided a document ONLY. There are no images.]"
+        elif has_img:
+            state_note += "The user has provided image(s) ONLY. There are no documents.]"
+        else:
+            state_note += "The user has provided NO FILES. Answer the query using your internal knowledge only. Do not say 'in this document'.]"
 
-        contents.append(query)
+        final_prompt = f"{state_note}\n\nUSER QUERY: {query}"
+        contents.append(final_prompt)
 
-        # ── Call Gemini with retry ────────────────────────
+        # ── 4. Call Gemini ───────────────────────────────
         response = call_gemini_with_retry(contents)
 
         cached_name = file_ref_store.get(session_key, {}).get("display_name")
         return jsonify({
-            "result":     response.text,
+            "result": response.text,
             "cached_pdf": cached_name
         })
 
@@ -211,11 +197,8 @@ def analyze():
 
     finally:
         if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-
+            try: os.unlink(tmp_path)
+            except: pass
 
 @app.route("/clear-pdf", methods=["POST"])
 def clear_pdf():
@@ -223,13 +206,10 @@ def clear_pdf():
     ref = file_ref_store.get(session_key)
     if ref:
         if ref.get("type") != "text":
-            try:
-                client.files.delete(name=ref["file_name"])
-            except Exception:
-                pass
+            try: client.files.delete(name=ref["file_name"])
+            except: pass
         file_ref_store.pop(session_key, None)
     return jsonify({"status": "cleared"})
-
 
 @app.route("/generate-image", methods=["POST"])
 def generate_image():
@@ -255,23 +235,17 @@ def generate_image():
         for generated_image in response.generated_images:
             img_bytes = generated_image.image.image_bytes
             img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-            return jsonify({
-                "image": f"data:image/jpeg;base64,{img_base64}"
-            })
+            return jsonify({"image": f"data:image/jpeg;base64,{img_base64}"})
 
-        return jsonify({
-            "error": "No image generated. Try a more descriptive prompt."
-        }), 400
+        return jsonify({"error": "No image generated. Try a more descriptive prompt."}), 400
 
     except Exception as e:
         err_str = str(e)
         if "paid plans" in err_str.lower() or "INVALID_ARGUMENT" in err_str:
-             return jsonify({"error": "Image generation (Imagen 3/4) requires a paid Google AI Studio plan. It is not available on the free tier."}), 400
-        
+             return jsonify({"error": "Image generation (Imagen) requires a paid Google AI Studio plan."}), 400
         import traceback
         traceback.print_exc()
         return jsonify({"error": err_str}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True)
